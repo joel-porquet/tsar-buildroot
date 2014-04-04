@@ -47,10 +47,16 @@ ifeq ($(BR2_LINUX_KERNEL_UBOOT_IMAGE),y)
 	LINUX_DEPENDENCIES += host-uboot-tools
 endif
 
+ifeq ($(BR2_LINUX_KERNEL_CUSTOM_TARGET_ARCH), y)
+LINUX_KERNEL_ARCH = $(BR2_LINUX_KERNEL_TARGET_ARCH)
+else
+LINUX_KERNEL_ARCH = $(KERNEL_ARCH)
+endif
+
 LINUX_MAKE_FLAGS = \
 	HOSTCC="$(HOSTCC)" \
 	HOSTCFLAGS="$(HOSTCFLAGS)" \
-	ARCH=$(KERNEL_ARCH) \
+	ARCH=$(LINUX_KERNEL_ARCH) \
 	INSTALL_MOD_PATH=$(TARGET_DIR) \
 	CROSS_COMPILE="$(CCACHE) $(TARGET_CROSS)" \
 	DEPMOD=$(HOST_DIR)/sbin/depmod
@@ -113,15 +119,15 @@ LINUX_MAKE_FLAGS += LOADADDR="$(LINUX_KERNEL_UIMAGE_LOADADDR)"
 endif
 
 # Compute the arch path, since i386 and x86_64 are in arch/x86 and not
-# in arch/$(KERNEL_ARCH). Even if the kernel creates symbolic links
+# in arch/$(LINUX_KERNEL_ARCH). Even if the kernel creates symbolic links
 # for bzImage, arch/i386 and arch/x86_64 do not exist when copying the
 # defconfig file.
-ifeq ($(KERNEL_ARCH),i386)
+ifeq ($(LINUX_KERNEL_ARCH),i386)
 KERNEL_ARCH_PATH = $(LINUX_DIR)/arch/x86
-else ifeq ($(KERNEL_ARCH),x86_64)
+else ifeq ($(LINUX_KERNEL_ARCH),x86_64)
 KERNEL_ARCH_PATH = $(LINUX_DIR)/arch/x86
 else
-KERNEL_ARCH_PATH = $(LINUX_DIR)/arch/$(KERNEL_ARCH)
+KERNEL_ARCH_PATH = $(LINUX_DIR)/arch/$(LINUX_KERNEL_ARCH)
 endif
 
 ifeq ($(BR2_LINUX_KERNEL_VMLINUX),y)
@@ -129,7 +135,7 @@ LINUX_IMAGE_PATH = $(LINUX_DIR)/$(LINUX_IMAGE_NAME)
 else ifeq ($(BR2_LINUX_KERNEL_VMLINUZ),y)
 LINUX_IMAGE_PATH = $(LINUX_DIR)/$(LINUX_IMAGE_NAME)
 else
-ifeq ($(KERNEL_ARCH),avr32)
+ifeq ($(LINUX_KERNEL_ARCH),avr32)
 LINUX_IMAGE_PATH = $(KERNEL_ARCH_PATH)/boot/images/$(LINUX_IMAGE_NAME)
 else
 LINUX_IMAGE_PATH = $(KERNEL_ARCH_PATH)/boot/$(LINUX_IMAGE_NAME)

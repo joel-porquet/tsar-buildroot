@@ -8,6 +8,20 @@ config BR2_LINUX_KERNEL
 
 if BR2_LINUX_KERNEL
 
+config BR2_LINUX_KERNEL_CUSTOM_TARGET_ARCH
+	bool "Custom target arch"
+	help
+		Select this option if you want to specify a custom Linux
+		kernel arch
+
+if BR2_LINUX_KERNEL_CUSTOM_TARGET_ARCH
+config BR2_LINUX_KERNEL_TARGET_ARCH
+	string "Custom Linux kernel arch"
+	help
+		Specify the custom Linux kernel arch
+endif
+
+
 #
 # Version selection. We provide the choice between:
 #
