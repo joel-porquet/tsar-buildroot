@@ -1,0 +1,4 @@
+config BR2_PACKAGE_EPFILTER
+    bool "epfilter"
+    help
+        Philips image filtering application

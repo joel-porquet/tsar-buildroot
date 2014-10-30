@@ -1,0 +1,283 @@
+divert(-1)
+
+#define(NEWPROC,) dnl
+
+define(BARRIER, `
+{
+    pthread_barrier_wait(&($1));
+}
+')
+
+
+define(BARDEC, `
+    pthread_barrier_t ($1);
+')
+
+
+define(BARINIT, `
+{
+    pthread_barrier_init(&($1), NULL, ($2));
+}
+')
+
+
+define(LOCKDEC, `pthread_mutex_t ($1);')
+define(LOCKINIT, `{pthread_mutex_init(&($1), NULL);}')
+define(LOCK, `{pthread_mutex_lock(&($1));}')
+define(UNLOCK, `{pthread_mutex_unlock(&($1));}')
+
+define(ALOCKDEC, `pthread_mutex_t $1[$2];')
+define(ALOCKINIT, `{
+   long int i, error;
+
+   for (i = 0; i < $2; i++) {
+      error = pthread_mutex_init(&$1[i], NULL);
+      if (error != 0) {
+         printf("Error while initializing array of locks.\n");
+         exit(-1);
+      }
+   }
+}')
+
+define(ALOCK, `{pthread_mutex_lock(&$1[$2]);}')
+define(AULOCK, `{pthread_mutex_unlock(&$1[$2]);}')
+
+define(PAUSEDEC, `
+struct {
+   pthread_mutex_t Mutex;
+   pthread_cond_t  CondVar;
+   unsigned long   Flag;
+} $1;
+')
+
+define(PAUSEINIT, `{
+   pthread_mutex_init(&$1.Mutex, NULL);
+   pthread_cond_init(&$1.CondVar, NULL);
+   $1.Flag = 0;
+}
+')
+
+define(CLEARPAUSE, `{
+   $1.Flag = 0;
+   pthread_mutex_unlock(&$1.Mutex);}
+')
+
+define(SETPAUSE, `{
+   pthread_mutex_lock(&$1.Mutex);
+   $1.Flag = 1;
+   pthread_cond_broadcast(&$1.CondVar);
+   pthread_mutex_unlock(&$1.Mutex);}
+')
+
+define(WAITPAUSE, `{
+   pthread_mutex_lock(&$1.Mutex);
+   if ($1.Flag == 0) {
+      pthread_cond_wait(&$1.CondVar, &$1.Mutex);
+   }
+}')
+
+
+define(WAIT_FOR_END, `{
+   long int i, error;
+   for (i = 1; i < ($1); i++) {
+      error = pthread_join(pthread_table[i], NULL);
+      if (error != 0) {
+         printf("*** Error in pthread_join\n");
+         exit(-1);
+      }
+   }
+}')
+
+define(CREATE, `{
+   long i, error;
+
+   for (i = 1; i < ($2); i++) {
+      error = pthread_create(&pthread_table[i], NULL, (void * (*) (void *)) ($1), (void *) i);
+      if (error != 0) {
+         printf("*** Error in pthread_create\n");
+         exit(-1);
+      }
+   }
+
+   $1(0);
+}')
+
+define(MAIN_END, `')
+
+define(MAIN_ENV,`
+#define MAX_THREADS 1024
+int isDynamic = 0;
+pthread_t pthread_table[MAX_THREADS];
+')
+
+define(EXTERN_ENV, `
+extern pthread_t pthread_table[];
+')
+
+define(G_MALLOC, `malloc($1);')
+define(G_FREE, `free($1);')
+define(G_MALLOC_F, `malloc($1)')
+define(NU_MALLOC, `malloc($1);')
+define(NU_FREE, `free($1);')
+define(NU_MALLOC_F, `malloc($1)')
+
+define(CLOCK_DEC, `
+unsigned long long int app_start;
+unsigned long long int app_end;
+unsigned long long int app_create;
+unsigned long long int app_join;
+unsigned long long int * thread_start;
+unsigned long long int * thread_end;
+unsigned long long int * thread_compute_start;
+unsigned long long int * thread_compute_end;
+unsigned long long int global_thread_start;
+unsigned long long int global_thread_end;
+unsigned long long int global_thread_compute_start;
+unsigned long long int global_thread_compute_end;
+
+')
+
+define(CLOCK, `
+{
+   struct timeval full_time;
+
+   gettimeofday(&full_time, NULL);
+   $1 = (unsigned long) ((full_time.tv_usec + full_time.tv_sec * 1000000) / 1000);
+}
+')
+
+
+define(CLOCK_INIT, `
+{
+    global_thread_start = 0xFFFFFFFFFFFFFFFFLLU;
+    global_thread_end = 0;
+    global_thread_compute_start = 0xFFFFFFFFFFFFFFFFLLU;
+    global_thread_compute_end = 0;
+
+    if ($1 > 0) {
+        thread_start = G_MALLOC(sizeof(unsigned long long int) * ($1));
+        thread_end = G_MALLOC(sizeof(unsigned long long int) * ($1));
+        thread_compute_start = G_MALLOC(sizeof(unsigned long long int) * ($1));
+        thread_compute_end = G_MALLOC(sizeof(unsigned long long int) * ($1));
+    }
+}
+')
+
+
+define(CLOCK_APP_START, `
+{
+    CLOCK(app_start);
+}
+')
+
+
+define(CLOCK_APP_END, `
+{
+    CLOCK(app_end);
+}
+')
+
+
+define(CLOCK_FINALIZE, `
+{
+    int i;
+
+    for (i = 0; i < ($1); i++) {
+        if (thread_start[i] < global_thread_start) {
+            global_thread_start = thread_start[i];
+        }
+    }
+    for (i = 0; i < ($1); i++) {
+        if (thread_compute_start[i] < global_thread_compute_start) {
+            global_thread_compute_start = thread_compute_start[i];
+        }
+    }
+    for (i = 0; i < ($1); i++) {
+        if (thread_end[i] > global_thread_end) {
+            global_thread_end = thread_end[i];
+        }
+    }
+    for (i = 0; i < ($1); i++) {
+        if (thread_compute_end[i] > global_thread_compute_end) {
+            global_thread_compute_end = thread_compute_end[i];
+        }
+    }
+
+    if ($1 > 0) {
+        free(thread_start);
+        free(thread_end);
+        free(thread_compute_start);
+        free(thread_compute_end);
+    }
+}
+')
+
+
+
+define(CLOCK_APP_CREATE, `
+{
+    CLOCK(app_create);
+}
+')
+
+
+define(CLOCK_APP_JOIN, `
+{
+    CLOCK(app_join);
+}
+')
+
+
+
+define(CLOCK_THREAD_START, `
+{
+    CLOCK(thread_start[$1]);
+}
+')
+
+
+define(CLOCK_THREAD_END, `
+{
+    CLOCK(thread_end[$1]);
+}
+')
+
+
+define(CLOCK_THREAD_COMPUTE_START, `
+{
+    CLOCK(thread_compute_start[$1]);
+}
+')
+
+
+define(CLOCK_THREAD_COMPUTE_END, `
+{
+    CLOCK(thread_compute_end[$1]);
+}
+')
+
+
+define(PRINT_CLOCK, `
+{
+    printf("Timestamps:\n");
+    printf("[APP_START]            : %16llu\n", app_start);
+    printf("[APP_CREATE]           : %16llu\n", app_create);
+    printf("[THREAD_START]         : %16llu\n", global_thread_start);
+    printf("[THREAD_COMPUTE_START] : %16llu\n", global_thread_compute_start);
+    printf("[THREAD_COMPUTE_END]   : %16llu\n", global_thread_compute_end);
+    printf("[THREAD_END]           : %16llu\n", global_thread_end);
+    printf("[APP_JOIN]             : %16llu\n", app_join);
+    printf("[APP_END]              : %16llu\n", app_end);
+    printf("Durations (in ms):\n");
+    printf("[TOTAL]                : %16llu\n", app_end - app_start);
+    printf("[THREAD]               : %16llu\n", app_join - app_create);
+    printf("[PARALLEL]             : %16llu\n", global_thread_end - global_thread_start);
+    printf("[PARALLEL_COMPUTE]     : %16llu\n", global_thread_compute_end - global_thread_compute_start);
+    printf("\n");
+}
+')
+
+
+
+divert(0)
+
