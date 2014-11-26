@@ -6,7 +6,7 @@ filter: filter.o
 filter.o: filter.c
 	$(CC) $< -c -o $@ $(CFLAGS)
 
-filter.c: filter.C
+filter.c: filter.C c.m4.linux
 	m4 -s -Ulen -Uindex -Umkstemp c.m4.linux $< > $@
 
 clean:
