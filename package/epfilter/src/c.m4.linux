@@ -16,77 +16,102 @@ define(BARDEC, `
 
 define(BARINIT, `
 {
-    pthread_barrier_init(&($1), NULL, ($2));
+    pthread_barrierattr_t attr;
+    pthread_barrierattr_init(&attr);
+    pthread_barrierattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
+
+    pthread_barrier_init(&($1), &attr, ($2));
 }
 ')
 
 
 define(LOCKDEC, `pthread_mutex_t ($1);')
-define(LOCKINIT, `{pthread_mutex_init(&($1), NULL);}')
-define(LOCK, `{pthread_mutex_lock(&($1));}')
-define(UNLOCK, `{pthread_mutex_unlock(&($1));}')
+define(LOCKINIT, `
+{
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
+
+    pthread_mutex_init(&($1), &attr);
+}
+')
+
+define(LOCK, `{ pthread_mutex_lock(&($1)); }')
+define(UNLOCK, `{ pthread_mutex_unlock(&($1)); }')
 
 define(ALOCKDEC, `pthread_mutex_t $1[$2];')
-define(ALOCKINIT, `{
-   long int i, error;
+define(ALOCKINIT, `
+{
+    unsigned long i, error;
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
 
    for (i = 0; i < $2; i++) {
-      error = pthread_mutex_init(&$1[i], NULL);
+        error = pthread_mutex_init(&$1[i], &attr);
       if (error != 0) {
          printf("Error while initializing array of locks.\n");
          exit(-1);
       }
    }
-}')
+}
+')
 
 define(ALOCK, `{pthread_mutex_lock(&$1[$2]);}')
 define(AULOCK, `{pthread_mutex_unlock(&$1[$2]);}')
 
 define(PAUSEDEC, `
-struct {
-   pthread_mutex_t Mutex;
-   pthread_cond_t  CondVar;
-   unsigned long   Flag;
-} $1;
+    struct {
+        pthread_mutex_t mutex;
+        pthread_cond_t cond_var;
+        unsigned long flag;
+    } $1;
 ')
 
-define(PAUSEINIT, `{
-   pthread_mutex_init(&$1.Mutex, NULL);
-   pthread_cond_init(&$1.CondVar, NULL);
-   $1.Flag = 0;
+
+define(PAUSEINIT, `
+{
+    pthread_mutexattr_t mattr;
+    pthread_mutexattr_init(&mattr);
+    pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
+
+    pthread_condattr_t cattr;
+    pthread_condattr_init(&cattr);
+    pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
+
+    pthread_mutex_init(&$1.mutex, &mattr);
+    pthread_cond_init(&$1.cond_var, &cattr);
+    $1.flag = 0;
 }
 ')
 
-define(CLEARPAUSE, `{
-   $1.Flag = 0;
-   pthread_mutex_unlock(&$1.Mutex);}
+
+define(CLEARPAUSE, `
+{
+    $1.flag = 0;
+    pthread_mutex_unlock(&$1.mutex);
+}
 ')
 
-define(SETPAUSE, `{
-   pthread_mutex_lock(&$1.Mutex);
-   $1.Flag = 1;
-   pthread_cond_broadcast(&$1.CondVar);
-   pthread_mutex_unlock(&$1.Mutex);}
+
+define(SETPAUSE, `
+{
+    pthread_mutex_lock(&$1.mutex);
+    $1.flag = 1;
+    pthread_cond_broadcast(&$1.cond_var);
+    pthread_mutex_unlock(&$1.mutex);
+}
 ')
 
-define(WAITPAUSE, `{
-   pthread_mutex_lock(&$1.Mutex);
-   if ($1.Flag == 0) {
-      pthread_cond_wait(&$1.CondVar, &$1.Mutex);
+define(WAITPAUSE, `
+{
+    pthread_mutex_lock(&$1.mutex);
+    if ($1.flag == 0) {
+        pthread_cond_wait(&$1.cond_var, &$1.mutex);
    }
-}')
+}
+')
 
-
-define(WAIT_FOR_END, `{
-   long int i, error;
-   for (i = 1; i < ($1); i++) {
-      error = pthread_join(pthread_table[i], NULL);
-      if (error != 0) {
-         printf("*** Error in pthread_join\n");
-         exit(-1);
-      }
-   }
-}')
 
 define(CREATE, `{
    long i, error;
@@ -102,11 +127,24 @@ define(CREATE, `{
    $1(0);
 }')
 
+define(WAIT_FOR_END, `
+{
+   int i, error;
+   for (i = 1; i < ($1); i++) {
+      error = pthread_join(pthread_table[i], NULL);
+      if (error != 0) {
+         printf("*** Error in pthread_join\n");
+         exit(-1);
+      }
+   }
+}
+')
+
 define(MAIN_END, `')
 
 define(MAIN_ENV,`
 #define MAX_THREADS 1024
-int isDynamic = 0;
+
 pthread_t pthread_table[MAX_THREADS];
 ')
 
@@ -122,43 +160,40 @@ define(NU_FREE, `free($1);')
 define(NU_MALLOC_F, `malloc($1)')
 
 define(CLOCK_DEC, `
-unsigned long long int app_start;
-unsigned long long int app_end;
-unsigned long long int app_create;
-unsigned long long int app_join;
-unsigned long long int * thread_start;
-unsigned long long int * thread_end;
-unsigned long long int * thread_compute_start;
-unsigned long long int * thread_compute_end;
-unsigned long long int global_thread_start;
-unsigned long long int global_thread_end;
-unsigned long long int global_thread_compute_start;
-unsigned long long int global_thread_compute_end;
+clock_t app_start;
+clock_t app_end;
+clock_t app_create;
+clock_t app_join;
+clock_t * thread_start;
+clock_t * thread_end;
+clock_t * thread_compute_start;
+clock_t * thread_compute_end;
+clock_t global_thread_start;
+clock_t global_thread_end;
+clock_t global_thread_compute_start;
+clock_t global_thread_compute_end;
 
 ')
 
 define(CLOCK, `
 {
-   struct timeval full_time;
-
-   gettimeofday(&full_time, NULL);
-   $1 = (unsigned long) ((full_time.tv_usec + full_time.tv_sec * 1000000) / 1000);
+    ($1) = clock();
 }
 ')
 
 
 define(CLOCK_INIT, `
 {
-    global_thread_start = 0xFFFFFFFFFFFFFFFFLLU;
+    global_thread_start = -1;
     global_thread_end = 0;
-    global_thread_compute_start = 0xFFFFFFFFFFFFFFFFLLU;
+    global_thread_compute_start = -1;
     global_thread_compute_end = 0;
 
     if ($1 > 0) {
-        thread_start = G_MALLOC(sizeof(unsigned long long int) * ($1));
-        thread_end = G_MALLOC(sizeof(unsigned long long int) * ($1));
-        thread_compute_start = G_MALLOC(sizeof(unsigned long long int) * ($1));
-        thread_compute_end = G_MALLOC(sizeof(unsigned long long int) * ($1));
+        thread_start = G_MALLOC(sizeof(clock_t) * ($1));
+        thread_end = G_MALLOC(sizeof(clock_t) * ($1));
+        thread_compute_start = G_MALLOC(sizeof(clock_t) * ($1));
+        thread_compute_end = G_MALLOC(sizeof(clock_t) * ($1));
     }
 }
 ')
@@ -260,19 +295,19 @@ define(CLOCK_THREAD_COMPUTE_END, `
 define(PRINT_CLOCK, `
 {
     printf("Timestamps:\n");
-    printf("[APP_START]            : %16llu\n", app_start);
-    printf("[APP_CREATE]           : %16llu\n", app_create);
-    printf("[THREAD_START]         : %16llu\n", global_thread_start);
-    printf("[THREAD_COMPUTE_START] : %16llu\n", global_thread_compute_start);
-    printf("[THREAD_COMPUTE_END]   : %16llu\n", global_thread_compute_end);
-    printf("[THREAD_END]           : %16llu\n", global_thread_end);
-    printf("[APP_JOIN]             : %16llu\n", app_join);
-    printf("[APP_END]              : %16llu\n", app_end);
-    printf("Durations (in ms):\n");
-    printf("[TOTAL]                : %16llu\n", app_end - app_start);
-    printf("[THREAD]               : %16llu\n", app_join - app_create);
-    printf("[PARALLEL]             : %16llu\n", global_thread_end - global_thread_start);
-    printf("[PARALLEL_COMPUTE]     : %16llu\n", global_thread_compute_end - global_thread_compute_start);
+    printf("[APP_START]            : %8lu\n", app_start);
+    printf("[APP_CREATE]           : %8lu\n", app_create);
+    printf("[THREAD_START]         : %8lu\n", global_thread_start);
+    printf("[THREAD_COMPUTE_START] : %8lu\n", global_thread_compute_start);
+    printf("[THREAD_COMPUTE_END]   : %8lu\n", global_thread_compute_end);
+    printf("[THREAD_END]           : %8lu\n", global_thread_end);
+    printf("[APP_JOIN]             : %8lu\n", app_join);
+    printf("[APP_END]              : %8lu\n", app_end);
+    printf("Durations (in cycles):\n");
+    printf("[TOTAL]                : %8lu\n", app_end - app_start);
+    printf("[THREAD]               : %8lu\n", app_join - app_create);
+    printf("[PARALLEL]             : %8lu\n", global_thread_end - global_thread_start);
+    printf("[PARALLEL_COMPUTE]     : %8lu\n", global_thread_compute_end - global_thread_compute_start);
     printf("\n");
 }
 ')
