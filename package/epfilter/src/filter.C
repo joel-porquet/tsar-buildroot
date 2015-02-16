@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #else
 #include <sys/time.h>
+#include <sys/sysinfo.h>
 #endif
 #include <stdlib.h>
 #include <unistd.h>
@@ -61,7 +62,7 @@ char * img_name;
 static void usage(char * name) {
     printf("Usage: %s <options> <image_name>\n", name);
     printf("options:\n");
-    printf("   -nN : N = Number of threads (default = %d).\n", DEFAULT_NTHREADS);
+    printf("   -nN : N = Number of threads (default = %d; 0: try to guess the number of processors).\n", DEFAULT_NTHREADS);
     printf("   -lL : L = Number of lines in image (no default, mandatory).\n");
     printf("   -cC : C = Number of columns in image (no default, mandatory).\n");
     printf("   -h  : Display help.\n");
@@ -83,6 +84,10 @@ int main(int argc, char ** argv) {
     while ((ch = getopt(argc, argv, "n:l:c:h")) != -1) {
         switch (ch) {
             case 'n': nglobal_threads = atol(optarg);
+#ifndef _ALMOS_
+                      if (nglobal_threads == 0)
+                          nglobal_threads = get_nprocs();
+#endif
                       break;
             case 'l':
                       nl = atoi(optarg);
